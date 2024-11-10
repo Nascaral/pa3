@@ -11,7 +11,6 @@
 #define MAX_REACTIONS 100
 #define MAX_CHATS 100000
 
-// Structs for Chat and Reaction
 typedef struct {
     char user[USERNAME_SIZE];
     char message[USERNAME_SIZE];
@@ -34,14 +33,11 @@ void url_decode(char *dest, const char *src, size_t max_len) {
     char a, b;
     size_t len = 0;
     while (*src && len < max_len - 1) {
-        if ((*src == '%') && ((a = src[1]) && (b = src[2])) &&
-            (isxdigit(a) && isxdigit(b))) {
-            if (a >= 'a') a -= 'a' - 'A';
-            if (a >= 'A') a -= ('A' - 10);
-            else a -= '0';
-            if (b >= 'a') b -= 'a' - 'A';
-            if (b >= 'A') b -= ('A' - 10);
-            else b -= '0';
+        if (*src == '%' && src[1] && src[2] && isxdigit((unsigned char)src[1]) && isxdigit((unsigned char)src[2])) {
+            a = src[1];
+            b = src[2];
+            a = (a >= 'a') ? a - 'a' + 10 : a - '0';
+            b = (b >= 'a') ? b - 'a' + 10 : b - '0';
             *dest++ = 16 * a + b;
             src += 3;
         } else if (*src == '+') {
@@ -55,14 +51,12 @@ void url_decode(char *dest, const char *src, size_t max_len) {
     *dest = '\0';
 }
 
-// Helper function to get the current timestamp
 void get_timestamp(char *buffer, size_t size) {
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
     strftime(buffer, size, "%Y-%m-%d %H:%M", tm_info);
 }
 
-// Function to add a chat
 uint8_t add_chat(const char* username, const char* message) {
     if (chat_count >= MAX_CHATS || strlen(username) >= USERNAME_SIZE || strlen(message) >= MESSAGE_SIZE) {
         return 0;
@@ -83,7 +77,6 @@ uint8_t add_chat(const char* username, const char* message) {
     return 1;
 }
 
-// Function to add a reaction (for responding to a specific chat)
 uint8_t add_reaction(const char* username, const char* response, uint32_t id) {
     if (id == 0 || id > chat_count || strlen(username) >= USERNAME_SIZE || strlen(response) >= USERNAME_SIZE) {
         return 0;
@@ -104,28 +97,29 @@ uint8_t add_reaction(const char* username, const char* response, uint32_t id) {
     return 1;
 }
 
-// Function to reset all chats
 void reset_chats() {
     chat_count = 0;
 }
-
-// Respond with all chats
 void respond_with_chats(int client) {
     char buffer[BUFFER_SIZE];
     int offset = 0;
 
-    offset += snprintf(buffer + offset, BUFFER_SIZE - offset, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n");
+    offset += snprintf(buffer + offset, BUFFER_SIZE - offset, 
+                       "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n");
 
     for (uint32_t i = 0; i < chat_count; i++) {
         Chat *chat = &chats[i];
 
-        offset += snprintf(buffer + offset, BUFFER_SIZE - offset, "[#%d %s] %s: %s\n",
+        // Adjusted formatting for main message
+        offset += snprintf(buffer + offset, BUFFER_SIZE - offset, 
+                           "[#%d %s] %20s: %s\n", 
                            chat->id, chat->timestamp, chat->user, chat->message);
 
+        // Formatting reactions with indentation and user names in parentheses
         for (uint32_t j = 0; j < chat->num_reactions; j++) {
             Reaction *reaction = &chat->reactions[j];
-            offset += snprintf(buffer + offset, BUFFER_SIZE - offset, "    (%s) %s\n",
-                               reaction->user, reaction->message);
+            offset += snprintf(buffer + offset, BUFFER_SIZE - offset, 
+                               "           (%s) %s\n", reaction->user, reaction->message);
         }
 
         if (offset >= BUFFER_SIZE - 256) {
@@ -139,7 +133,6 @@ void respond_with_chats(int client) {
     }
 }
 
-// Handle POST requests to add a new chat
 void handle_post(char *path, int client) {
     char *user = strstr(path, "user=");
     char *message = strstr(path, "&message=");
@@ -149,12 +142,19 @@ void handle_post(char *path, int client) {
         return;
     }
 
-    user += 5;
-    message += 9;
+    user += 5;  // Move past "user="
+    message += 9;  // Move past "&message="
+
+    // Terminate the strings at '&' or end of line
+    char *user_end = strchr(user, '&');
+    if (user_end) *user_end = '\0';
+    char *msg_end = strchr(message, ' ');
+    if (msg_end) *msg_end = '\0';
 
     char username[USERNAME_SIZE];
     char msg[MESSAGE_SIZE];
 
+    // Decode only the user and message parts
     url_decode(username, user, USERNAME_SIZE);
     url_decode(msg, message, MESSAGE_SIZE);
 
@@ -166,21 +166,31 @@ void handle_post(char *path, int client) {
     respond_with_chats(client);
 }
 
-// Handle REACTION requests to add a reaction
 void handle_reaction(char *path, int client) {
     char *user = strstr(path, "user=");
     char *reaction = strstr(path, "&message=");
     char *id = strstr(path, "&id=");
 
+    // Check for the existence of all required parameters
     if (!user || !reaction || !id) {
         write(client, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
         return;
     }
 
-    user += 5;
-    reaction += 9;
-    id += 4;
+    // Advance pointers to the start of each parameter's value
+    user += 5;       // Move past "user="
+    reaction += 9;   // Move past "&message="
+    id += 4;         // Move past "&id="
 
+    // Terminate each parameter at the next delimiter or end of line
+    char *user_end = strchr(user, '&');
+    if (user_end) *user_end = '\0';
+    char *reaction_end = strchr(reaction, '&');
+    if (reaction_end) *reaction_end = '\0';
+    char *id_end = strchr(id, ' ');
+    if (id_end) *id_end = '\0';
+
+    // Decode the parameters
     char username[USERNAME_SIZE];
     char reaction_text[USERNAME_SIZE];
     uint32_t chat_id = atoi(id);
@@ -188,6 +198,7 @@ void handle_reaction(char *path, int client) {
     url_decode(username, user, USERNAME_SIZE);
     url_decode(reaction_text, reaction, USERNAME_SIZE);
 
+    // Add the reaction and respond to client
     if (!add_reaction(username, reaction_text, chat_id)) {
         write(client, "HTTP/1.1 500 Internal Server Error\r\n\r\n", 36);
         return;
@@ -196,13 +207,11 @@ void handle_reaction(char *path, int client) {
     respond_with_chats(client);
 }
 
-// Handle /reset requests
 void handle_reset(int client) {
     reset_chats();
     write(client, "HTTP/1.1 200 OK\r\n\r\n", 19);
 }
 
-// Main request handler
 void handle_request(char *request, int client) {
     printf("Received request: %s\n", request);
 
@@ -219,10 +228,10 @@ void handle_request(char *request, int client) {
     }
 }
 
-// Main entry point
 int main(int argc, char *argv[]) {
     int port = (argc > 1) ? atoi(argv[1]) : 0;
     start_server(&handle_request, port);
     return 0;
 }
+
 
