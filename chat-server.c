@@ -10,7 +10,6 @@
 #define TIMESTAMP_SIZE 20
 #define MAX_REACTIONS 100
 #define MAX_CHATS 100000
-
 typedef struct {
     char user[USERNAME_SIZE];
     char message[USERNAME_SIZE];
@@ -139,15 +138,16 @@ void respond_with_chats(int client) {
     }
 }
 
-// Helper to extract parameter values
+// Helper to extract parameter values and stop at the end of the request line
 int extract_param(const char *source, const char *param, char *dest, size_t dest_size) {
     const char *start = strstr(source, param);
     if (!start) return 0;
 
     start += strlen(param);
     const char *end = strchr(start, '&');
-    size_t length = end ? (size_t)(end - start) : strlen(start);
+    if (!end) end = strchr(start, ' ');  // Stop at the end of the line to avoid HTTP headers
 
+    size_t length = end ? (size_t)(end - start) : strlen(start);
     if (length >= dest_size) return 0;
 
     strncpy(dest, start, length);
@@ -155,7 +155,6 @@ int extract_param(const char *source, const char *param, char *dest, size_t dest
     url_decode(dest, dest, dest_size);
     return 1;
 }
-
 
 // Handle POST requests to add a new chat
 void handle_post(char *path, int client) {
