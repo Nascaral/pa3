@@ -58,14 +58,17 @@ void get_timestamp(char *buffer, size_t size) {
     strftime(buffer, size, "%Y-%m-%d %H:%M:%S", tm_info);
 }
 
-// Function to add a chat
 uint8_t add_chat(const char* username, const char* message) {
+    static uint32_t next_chat_id = 1;  // Initialize the ID counter
+
     if (chat_count >= MAX_CHATS || strlen(username) >= USERNAME_SIZE || strlen(message) >= MESSAGE_SIZE) {
-        return 0;
+        return 0;  // Return early if there's an error without incrementing next_chat_id
     }
 
     Chat *chat = &chats[chat_count];
-    chat->id = chat_count + 1;
+    chat->id = next_chat_id;  // Assign the current ID to the chat
+    next_chat_id++;           // Increment the ID counter for the next chat
+
     strncpy(chat->user, username, USERNAME_SIZE - 1);
     chat->user[USERNAME_SIZE - 1] = '\0';
 
@@ -75,9 +78,11 @@ uint8_t add_chat(const char* username, const char* message) {
     get_timestamp(chat->timestamp, TIMESTAMP_SIZE);
     chat->num_reactions = 0;
 
-    chat_count++;
-    return 1;
+    chat_count++;  // Increment chat_count only after a successful addition
+
+    return 1;  // Return success
 }
+
 
 // Function to add a reaction to a specific chat
 uint8_t add_reaction(const char* username, const char* response, uint32_t id) {
