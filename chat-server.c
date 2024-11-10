@@ -59,15 +59,12 @@ void get_timestamp(char *buffer, size_t size) {
 }
 
 uint8_t add_chat(const char* username, const char* message) {
-    static uint32_t next_chat_id = 1;  // Initialize the ID counter
-
     if (chat_count >= MAX_CHATS || strlen(username) >= USERNAME_SIZE || strlen(message) >= MESSAGE_SIZE) {
-        return 0;  // Return early if there's an error without incrementing next_chat_id
+        return 0;  // Return early if there's an error without incrementing chat_count
     }
 
     Chat *chat = &chats[chat_count];
-    chat->id = next_chat_id;  // Assign the current ID to the chat
-    next_chat_id++;           // Increment the ID counter for the next chat
+    chat->id = chat_count + 1;  // Assign ID as chat_count + 1 to keep IDs consistent and sequential
 
     strncpy(chat->user, username, USERNAME_SIZE - 1);
     chat->user[USERNAME_SIZE - 1] = '\0';
