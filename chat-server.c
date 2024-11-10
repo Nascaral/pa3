@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 
 #define USERNAME_SIZE 16
 #define MESSAGE_SIZE 256
@@ -25,9 +26,34 @@ typedef struct {
     Reaction reactions[MAX_REACTIONS];
 } Chat;
 
-// Global variables for storing chats
 Chat chats[MAX_CHATS];
 uint32_t chat_count = 0;
+
+// Decode URL-encoded strings (e.g., converting %20 to spaces)
+void url_decode(char *dest, const char *src, size_t max_len) {
+    char a, b;
+    size_t len = 0;
+    while (*src && len < max_len - 1) {
+        if ((*src == '%') && ((a = src[1]) && (b = src[2])) &&
+            (isxdigit(a) && isxdigit(b))) {
+            if (a >= 'a') a -= 'a' - 'A';
+            if (a >= 'A') a -= ('A' - 10);
+            else a -= '0';
+            if (b >= 'a') b -= 'a' - 'A';
+            if (b >= 'A') b -= ('A' - 10);
+            else b -= '0';
+            *dest++ = 16 * a + b;
+            src += 3;
+        } else if (*src == '+') {
+            *dest++ = ' ';
+            src++;
+        } else {
+            *dest++ = *src++;
+        }
+        len++;
+    }
+    *dest = '\0';
+}
 
 // Helper function to get the current timestamp
 void get_timestamp(char *buffer, size_t size) {
@@ -39,36 +65,43 @@ void get_timestamp(char *buffer, size_t size) {
 // Function to add a chat
 uint8_t add_chat(const char* username, const char* message) {
     if (chat_count >= MAX_CHATS || strlen(username) >= USERNAME_SIZE || strlen(message) >= MESSAGE_SIZE) {
-        return 0; // Error: limits exceeded
+        return 0;
     }
 
     Chat *chat = &chats[chat_count];
     chat->id = chat_count + 1;
-    strncpy(chat->user, username, USERNAME_SIZE);
-    strncpy(chat->message, message, MESSAGE_SIZE);
+    strncpy(chat->user, username, USERNAME_SIZE - 1);
+    chat->user[USERNAME_SIZE - 1] = '\0';
+
+    strncpy(chat->message, message, MESSAGE_SIZE - 1);
+    chat->message[MESSAGE_SIZE - 1] = '\0';
+
     get_timestamp(chat->timestamp, TIMESTAMP_SIZE);
     chat->num_reactions = 0;
 
     chat_count++;
-    return 1; // Success
+    return 1;
 }
 
-// Function to add a reaction
-uint8_t add_reaction(const char* username, const char* reaction, uint32_t id) {
-    if (id == 0 || id > chat_count || strlen(username) >= USERNAME_SIZE || strlen(reaction) >= USERNAME_SIZE) {
-        return 0; // Error: invalid ID or limits exceeded
+// Function to add a reaction (for responding to a specific chat)
+uint8_t add_reaction(const char* username, const char* response, uint32_t id) {
+    if (id == 0 || id > chat_count || strlen(username) >= USERNAME_SIZE || strlen(response) >= USERNAME_SIZE) {
+        return 0;
     }
 
     Chat *chat = &chats[id - 1];
     if (chat->num_reactions >= MAX_REACTIONS) {
-        return 0; // Error: reaction limit exceeded
+        return 0;
     }
 
     Reaction *new_reaction = &chat->reactions[chat->num_reactions++];
-    strncpy(new_reaction->user, username, USERNAME_SIZE);
-    strncpy(new_reaction->message, reaction, USERNAME_SIZE);
+    strncpy(new_reaction->user, username, USERNAME_SIZE - 1);
+    new_reaction->user[USERNAME_SIZE - 1] = '\0';
 
-    return 1; // Success
+    strncpy(new_reaction->message, response, USERNAME_SIZE - 1);
+    new_reaction->message[USERNAME_SIZE - 1] = '\0';
+
+    return 1;
 }
 
 // Function to reset all chats
@@ -76,13 +109,16 @@ void reset_chats() {
     chat_count = 0;
 }
 
-// Respond with chats
+// Respond with all chats
 void respond_with_chats(int client) {
     char buffer[BUFFER_SIZE];
     int offset = 0;
 
+    offset += snprintf(buffer + offset, BUFFER_SIZE - offset, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n");
+
     for (uint32_t i = 0; i < chat_count; i++) {
         Chat *chat = &chats[i];
+
         offset += snprintf(buffer + offset, BUFFER_SIZE - offset, "[#%d %s] %s: %s\n",
                            chat->id, chat->timestamp, chat->user, chat->message);
 
@@ -91,10 +127,16 @@ void respond_with_chats(int client) {
             offset += snprintf(buffer + offset, BUFFER_SIZE - offset, "    (%s) %s\n",
                                reaction->user, reaction->message);
         }
+
+        if (offset >= BUFFER_SIZE - 256) {
+            write(client, buffer, offset);
+            offset = 0;
+        }
     }
 
-    write(client, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n", 37);
-    write(client, buffer, offset);
+    if (offset > 0) {
+        write(client, buffer, offset);
+    }
 }
 
 // Handle POST requests to add a new chat
@@ -107,13 +149,14 @@ void handle_post(char *path, int client) {
         return;
     }
 
-    user += 5; // Move pointer past "user="
-    message += 9; // Move pointer past "&message="
+    user += 5;
+    message += 9;
 
     char username[USERNAME_SIZE];
     char msg[MESSAGE_SIZE];
-    strncpy(username, user, strchr(user, '&') - user);
-    strncpy(msg, message, strchr(message, ' ') - message);
+
+    url_decode(username, user, USERNAME_SIZE);
+    url_decode(msg, message, MESSAGE_SIZE);
 
     if (!add_chat(username, msg)) {
         write(client, "HTTP/1.1 500 Internal Server Error\r\n\r\n", 36);
@@ -142,8 +185,8 @@ void handle_reaction(char *path, int client) {
     char reaction_text[USERNAME_SIZE];
     uint32_t chat_id = atoi(id);
 
-    strncpy(username, user, strchr(user, '&') - user);
-    strncpy(reaction_text, reaction, strchr(reaction, '&') - reaction);
+    url_decode(username, user, USERNAME_SIZE);
+    url_decode(reaction_text, reaction, USERNAME_SIZE);
 
     if (!add_reaction(username, reaction_text, chat_id)) {
         write(client, "HTTP/1.1 500 Internal Server Error\r\n\r\n", 36);
@@ -182,3 +225,4 @@ int main(int argc, char *argv[]) {
     start_server(&handle_request, port);
     return 0;
 }
+
