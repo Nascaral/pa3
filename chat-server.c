@@ -156,6 +156,7 @@ int extract_param(const char *source, const char *param, char *dest, size_t dest
     return 1;
 }
 
+
 // Handle POST requests to add a new chat
 void handle_post(char *path, int client) {
     char username[USERNAME_SIZE];
