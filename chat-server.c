@@ -139,25 +139,33 @@ void respond_with_chats(int client) {
     }
 }
 
+// Helper to extract parameter values
+int extract_param(const char *source, const char *param, char *dest, size_t dest_size) {
+    const char *start = strstr(source, param);
+    if (!start) return 0;
+
+    start += strlen(param);
+    const char *end = strchr(start, '&');
+    size_t length = end ? (size_t)(end - start) : strlen(start);
+
+    if (length >= dest_size) return 0;
+
+    strncpy(dest, start, length);
+    dest[length] = '\0';
+    url_decode(dest, dest, dest_size);
+    return 1;
+}
+
 // Handle POST requests to add a new chat
 void handle_post(char *path, int client) {
-    char *user = strstr(path, "user=");
-    char *message = strstr(path, "&message=");
-
-    if (!user || !message) {
-        write(client, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
-        return;
-    }
-
-    user += 5;  // Move past "user="
-    message += 9;  // Move past "&message="
-
     char username[USERNAME_SIZE];
     char msg[MESSAGE_SIZE];
 
-    // Decode only the user and message parts
-    url_decode(username, user, USERNAME_SIZE);
-    url_decode(msg, message, MESSAGE_SIZE);
+    if (!extract_param(path, "user=", username, USERNAME_SIZE) || 
+        !extract_param(path, "&message=", msg, MESSAGE_SIZE)) {
+        write(client, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
+        return;
+    }
 
     if (!add_chat(username, msg)) {
         write(client, "HTTP/1.1 500 Internal Server Error\r\n\r\n", 36);
@@ -169,29 +177,19 @@ void handle_post(char *path, int client) {
 
 // Handle REACTION requests to add a reaction
 void handle_reaction(char *path, int client) {
-    char *user = strstr(path, "user=");
-    char *reaction = strstr(path, "&message=");
-    char *id = strstr(path, "&id=");
+    char username[USERNAME_SIZE];
+    char reaction_text[USERNAME_SIZE];
+    char id_str[10];
 
-    // Check for the existence of all required parameters
-    if (!user || !reaction || !id) {
+    if (!extract_param(path, "user=", username, USERNAME_SIZE) ||
+        !extract_param(path, "&message=", reaction_text, USERNAME_SIZE) ||
+        !extract_param(path, "&id=", id_str, sizeof(id_str))) {
         write(client, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
         return;
     }
 
-    // Advance pointers to the start of each parameter's value
-    user += 5;       // Move past "user="
-    reaction += 9;   // Move past "&message="
-    id += 4;         // Move past "&id="
+    uint32_t chat_id = (uint32_t)atoi(id_str);
 
-    char username[USERNAME_SIZE];
-    char reaction_text[USERNAME_SIZE];
-    uint32_t chat_id = atoi(id);
-
-    url_decode(username, user, USERNAME_SIZE);
-    url_decode(reaction_text, reaction, USERNAME_SIZE);
-
-    // Add the reaction and respond to client
     if (!add_reaction(username, reaction_text, chat_id)) {
         write(client, "HTTP/1.1 500 Internal Server Error\r\n\r\n", 36);
         return;
