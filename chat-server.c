@@ -29,7 +29,7 @@ typedef struct {
 Chat chats[MAX_CHATS];
 uint32_t chat_count = 0;
 
-// Decode URL-encoded strings (e.g., converting %20 to spaces)
+// Decode URL-encoded strings (converting %20 to spaces)
 void url_decode(char *dest, const char *src, size_t max_len) {
     char a, b;
     size_t len = 0;
