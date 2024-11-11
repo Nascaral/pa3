@@ -107,7 +107,6 @@ void reset_chats() {
     chat_count = 0;
 }
 
-// Respond with all chats
 void respond_with_chats(int client) {
     char buffer[BUFFER_SIZE];
     int offset = 0;
@@ -117,13 +116,13 @@ void respond_with_chats(int client) {
 
     for (uint32_t i = 0; i < chat_count; i++) {
         Chat *chat = &chats[i];
-
+        
         // Format main chat entry
         offset += snprintf(buffer + offset, BUFFER_SIZE - offset, 
                            "[#%d %s] %20s: %s\n", 
                            chat->id, chat->timestamp, chat->user, chat->message);
 
-        // Format each reaction, ensuring correct indentation and parentheses around the user
+        // Format each reaction
         for (uint32_t j = 0; j < chat->num_reactions; j++) {
             Reaction *reaction = &chat->reactions[j];
             offset += snprintf(buffer + offset, BUFFER_SIZE - offset, 
@@ -131,16 +130,19 @@ void respond_with_chats(int client) {
                                reaction->user, reaction->message);
         }
 
+        // Write to client in chunks if near buffer limit
         if (offset >= BUFFER_SIZE - 256) {
             write(client, buffer, offset);
-            offset = 0;
+            offset = 0; // Clear buffer to avoid duplicates
         }
     }
 
+    // Final write to send remaining data
     if (offset > 0) {
         write(client, buffer, offset);
     }
 }
+
 // Helper to extract parameter values and stop at the end of the request line
 int extract_param(const char *source, const char *param, char *dest, size_t dest_size) {
     const char *start = strstr(source, param);
