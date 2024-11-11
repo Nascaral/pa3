@@ -28,7 +28,6 @@ typedef struct {
 Chat chats[MAX_CHATS];
 uint32_t chat_count = 0;
 
-// Decode URL-encoded strings (e.g., converting %20 to spaces)
 void url_decode(char *dest, const char *src, size_t max_len) {
     char a, b;
     size_t len = 0;
@@ -145,19 +144,25 @@ void respond_with_chats(int client) {
 }
 
 int extract_param(const char *source, const char *param, char *dest, size_t dest_size) {
-    const char *start = strstr(source, param);
+    char *query = strstr(source, "?"); // Locate start of query string
+    if (!query) query = (char *)source; // If no '?', treat as normal string
+
+    char search_param[32];
+    snprintf(search_param, sizeof(search_param), "%s=", param);
+
+    // Search for the parameter within the query
+    char *start = strstr(query, search_param);
     if (!start) return 0;
 
-    start += strlen(param);
-    const char *end = strchr(start, '&');  
-    if (!end) end = strchr(start, ' ');  
+    start += strlen(search_param);  // Move to the beginning of the parameter value
+    char *end = strchr(start, '&'); // Look for the end of this parameter
 
     size_t length = end ? (size_t)(end - start) : strlen(start);
-    if (length >= dest_size) return 0;    
+    if (length >= dest_size) return 0;
 
-    strncpy(dest, start, length);
+    strncpy(dest, start, length);   // Copy raw parameter value
     dest[length] = '\0';
-    url_decode(dest, dest, dest_size);    
+    url_decode(dest, dest, dest_size);  // Decode URL encoding (e.g., %20 -> space)
     return 1;
 }
 
