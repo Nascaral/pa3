@@ -58,6 +58,7 @@ void get_timestamp(char *buffer, size_t size) {
     strftime(buffer, size, "%Y-%m-%d %H:%M:%S", tm_info);
 }
 
+// Add a new chat entry
 uint8_t add_chat(const char* username, const char* message) {
     if (chat_count >= MAX_CHATS || strlen(username) >= USERNAME_SIZE || strlen(message) >= MESSAGE_SIZE) {
         return 0;  // Return early if there's an error without incrementing chat_count
@@ -79,7 +80,6 @@ uint8_t add_chat(const char* username, const char* message) {
 
     return 1;  // Return success
 }
-
 
 // Function to add a reaction to a specific chat
 uint8_t add_reaction(const char* username, const char* response, uint32_t id) {
@@ -104,9 +104,11 @@ uint8_t add_reaction(const char* username, const char* response, uint32_t id) {
 
 // Function to reset all chats
 void reset_chats() {
-    chat_count = 0;
+    chat_count = 0;  // Reset chat count
+    memset(chats, 0, sizeof(chats));  // Clear chat entries
 }
 
+// Respond with all chats
 void respond_with_chats(int client) {
     char buffer[BUFFER_SIZE];
     int offset = 0;
@@ -130,14 +132,13 @@ void respond_with_chats(int client) {
                                reaction->user, reaction->message);
         }
 
-        // Write to client in chunks if near buffer limit
+        // Write buffer if near limit, then reset
         if (offset >= BUFFER_SIZE - 256) {
             write(client, buffer, offset);
             offset = 0; // Clear buffer to avoid duplicates
         }
     }
 
-    // Final write to send remaining data
     if (offset > 0) {
         write(client, buffer, offset);
     }
