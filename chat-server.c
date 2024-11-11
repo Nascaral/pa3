@@ -56,8 +56,7 @@ void url_decode(char *dest, const char *src, size_t max_len) {
 void get_timestamp(char *buffer, size_t size) {
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
-    strftime(buffer, size, "%Y-%m-%d %H:%M", tm_info);
-}
+    strftime(buffer, size, "%Y-%m-%d %H:%M:%S", tm_info); 
 
 uint8_t add_chat(const char* username, const char* message) {
     if (chat_count >= MAX_CHATS || strlen(username) >= USERNAME_SIZE || strlen(message) >= MESSAGE_SIZE) {
