@@ -144,21 +144,20 @@ void respond_with_chats(int client) {
     }
 }
 
-// Helper to extract parameter values and stop at the end of the request line
 int extract_param(const char *source, const char *param, char *dest, size_t dest_size) {
     const char *start = strstr(source, param);
     if (!start) return 0;
 
     start += strlen(param);
-    const char *end = strchr(start, '&');
-    if (!end) end = strchr(start, ' ');  // Stop at the end of the line to avoid HTTP headers
+    const char *end = strchr(start, '&');  
+    if (!end) end = strchr(start, ' ');  
 
     size_t length = end ? (size_t)(end - start) : strlen(start);
-    if (length >= dest_size) return 0;
+    if (length >= dest_size) return 0;    
 
     strncpy(dest, start, length);
     dest[length] = '\0';
-    url_decode(dest, dest, dest_size);
+    url_decode(dest, dest, dest_size);    
     return 1;
 }
 
