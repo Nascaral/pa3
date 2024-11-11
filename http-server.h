@@ -13,6 +13,6 @@
 
 void start_server(void(*handler)(char*, int), int port);
 
-#define BUFFER_SIZE 2048
+#define BUFFER_SIZE 4096
 
 #endif
