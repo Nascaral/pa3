@@ -10,6 +10,7 @@
 #define TIMESTAMP_SIZE 20
 #define MAX_REACTIONS 100
 #define MAX_CHATS 100000
+#define BUFFER_SIZE 4096  // Ensure buffer size is large enough for response data
 
 typedef struct {
     char user[USERNAME_SIZE];
@@ -64,7 +65,7 @@ uint8_t add_chat(const char* username, const char* message) {
     }
 
     Chat *chat = &chats[chat_count];
-    chat->id = chat_count + 1;  // Assign ID as chat_count + 1 to keep IDs consistent and sequential
+    chat->id = chat_count + 1;
 
     strncpy(chat->user, username, USERNAME_SIZE - 1);
     chat->user[USERNAME_SIZE - 1] = '\0';
@@ -79,7 +80,6 @@ uint8_t add_chat(const char* username, const char* message) {
 
     return 1;  // Return success
 }
-
 
 // Function to add a reaction to a specific chat
 uint8_t add_reaction(const char* username, const char* response, uint32_t id) {
@@ -118,22 +118,26 @@ void respond_with_chats(int client) {
         Chat *chat = &chats[i];
         
         // Format main chat entry
-        offset += snprintf(buffer + offset, BUFFER_SIZE - offset, 
-                           "[#%d %s] %20s: %s\n", 
-                           chat->id, chat->timestamp, chat->user, chat->message);
+        int written = snprintf(buffer + offset, BUFFER_SIZE - offset, 
+                               "[#%d %s] %20s: %s\n", 
+                               chat->id, chat->timestamp, chat->user, chat->message);
+        if (written < 0 || written >= BUFFER_SIZE - offset) break;
+        offset += written;
 
         // Format each reaction
         for (uint32_t j = 0; j < chat->num_reactions; j++) {
             Reaction *reaction = &chat->reactions[j];
-            offset += snprintf(buffer + offset, BUFFER_SIZE - offset, 
+            written = snprintf(buffer + offset, BUFFER_SIZE - offset, 
                                "                              (%s) %s\n", 
                                reaction->user, reaction->message);
+            if (written < 0 || written >= BUFFER_SIZE - offset) break;
+            offset += written;
         }
 
         // Write to client in chunks if near buffer limit
         if (offset >= BUFFER_SIZE - 256) {
             write(client, buffer, offset);
-            offset = 0; // Clear buffer to avoid duplicates
+            offset = 0;
         }
     }
 
@@ -143,14 +147,13 @@ void respond_with_chats(int client) {
     }
 }
 
-// Helper to extract parameter values and stop at the end of the request line
 int extract_param(const char *source, const char *param, char *dest, size_t dest_size) {
     const char *start = strstr(source, param);
     if (!start) return 0;
 
     start += strlen(param);
     const char *end = strchr(start, '&');
-    if (!end) end = strchr(start, ' ');  // Stop at the end of the line to avoid HTTP headers
+    if (!end) end = strchr(start, ' ');
 
     size_t length = end ? (size_t)(end - start) : strlen(start);
     if (length >= dest_size) return 0;
