@@ -10,6 +10,7 @@
 #define TIMESTAMP_SIZE 20
 #define MAX_REACTIONS 100
 #define MAX_CHATS 100000
+#define BUFFER_SIZE 4096
 
 typedef struct {
     char user[USERNAME_SIZE];
@@ -28,6 +29,7 @@ typedef struct {
 Chat chats[MAX_CHATS];
 uint32_t chat_count = 0;
 
+// Decode URL-encoded strings (e.g., converting %20 to spaces)
 void url_decode(char *dest, const char *src, size_t max_len) {
     char a, b;
     size_t len = 0;
@@ -48,6 +50,26 @@ void url_decode(char *dest, const char *src, size_t max_len) {
         len++;
     }
     *dest = '\0';
+}
+
+// Improved extract_param function to handle unquoted parameters in URLs
+int extract_param(const char *source, const char *param, char *dest, size_t dest_size) {
+    char search_param[32];
+    snprintf(search_param, sizeof(search_param), "%s=", param);
+
+    char *start = strstr(source, search_param);
+    if (!start) return 0;
+
+    start += strlen(search_param);  // Move to the beginning of the parameter value
+    char *end = strchr(start, '&'); // Look for the end of this parameter
+
+    size_t length = end ? (size_t)(end - start) : strlen(start);
+    if (length >= dest_size) return 0;
+
+    strncpy(dest, start, length);   // Copy raw parameter value
+    dest[length] = '\0';
+    url_decode(dest, dest, dest_size);  // Decode URL encoding (e.g., %20 -> space)
+    return 1;
 }
 
 // Helper function to get the current timestamp with seconds included
@@ -143,36 +165,13 @@ void respond_with_chats(int client) {
     }
 }
 
-int extract_param(const char *source, const char *param, char *dest, size_t dest_size) {
-    char *query = strstr(source, "?"); // Locate start of query string
-    if (!query) query = (char *)source; // If no '?', treat as normal string
-
-    char search_param[32];
-    snprintf(search_param, sizeof(search_param), "%s=", param);
-
-    // Search for the parameter within the query
-    char *start = strstr(query, search_param);
-    if (!start) return 0;
-
-    start += strlen(search_param);  // Move to the beginning of the parameter value
-    char *end = strchr(start, '&'); // Look for the end of this parameter
-
-    size_t length = end ? (size_t)(end - start) : strlen(start);
-    if (length >= dest_size) return 0;
-
-    strncpy(dest, start, length);   // Copy raw parameter value
-    dest[length] = '\0';
-    url_decode(dest, dest, dest_size);  // Decode URL encoding (e.g., %20 -> space)
-    return 1;
-}
-
 // Handle POST requests to add a new chat
 void handle_post(char *path, int client) {
     char username[USERNAME_SIZE];
     char msg[MESSAGE_SIZE];
 
     if (!extract_param(path, "user=", username, USERNAME_SIZE) || 
-        !extract_param(path, "&message=", msg, MESSAGE_SIZE)) {
+        !extract_param(path, "message=", msg, MESSAGE_SIZE)) {
         write(client, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
         return;
     }
@@ -192,8 +191,8 @@ void handle_reaction(char *path, int client) {
     char id_str[10];
 
     if (!extract_param(path, "user=", username, USERNAME_SIZE) ||
-        !extract_param(path, "&message=", reaction_text, USERNAME_SIZE) ||
-        !extract_param(path, "&id=", id_str, sizeof(id_str))) {
+        !extract_param(path, "message=", reaction_text, USERNAME_SIZE) ||
+        !extract_param(path, "id=", id_str, sizeof(id_str))) {
         write(client, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
         return;
     }
