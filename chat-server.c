@@ -10,7 +10,6 @@
 #define TIMESTAMP_SIZE 20
 #define MAX_REACTIONS 100
 #define MAX_CHATS 100000
-#define BUFFER_SIZE 4096
 
 typedef struct {
     char user[USERNAME_SIZE];
