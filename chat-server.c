@@ -34,11 +34,12 @@ void url_decode(char *dest, const char *src, size_t max_len) {
     char a, b;
     size_t len = 0;
     while (*src && len < max_len - 1) {
-        if (*src == '%' && src[1] && src[2] && isxdigit((unsigned char)src[1]) && isxdigit((unsigned char)src[2])) {
+        if (*src == '%' && src[1] && src[2] &&
+            isxdigit((unsigned char)src[1]) && isxdigit((unsigned char)src[2])) {
             a = src[1];
             b = src[2];
-            a = (a >= 'a') ? a - 'a' + 10 : a - '0';
-            b = (b >= 'a') ? b - 'a' + 10 : b - '0';
+            a = (a >= 'a') ? (a - 'a' + 10) : ((a >= 'A') ? (a - 'A' + 10) : (a - '0'));
+            b = (b >= 'a') ? (b - 'a' + 10) : ((b >= 'A') ? (b - 'A' + 10) : (b - '0'));
             *dest++ = 16 * a + b;
             src += 3;
         } else if (*src == '+') {
